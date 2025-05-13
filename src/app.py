@@ -1,10 +1,9 @@
 from flask import Flask, request, jsonify
 import torch
-from transformers import BertTokenizer, BertModel
+from transformers import BertTokenizer, BertModel, AutoModelForSeq2SeqLM, AutoTokenizer
 import os
 import boto3
 from botocore.exceptions import ClientError
-import language_tool_python
 
 app = Flask(__name__)
 
@@ -76,9 +75,15 @@ def predict_emotion(text, model, tokenizer, device='cpu'):
     
     return emotion_categories[predicted_class], probabilities[0].tolist()
 
+# Grammar correction modeli ve tokenizer'ı yükle
+grammar_tokenizer = AutoTokenizer.from_pretrained("prithivida/grammar_error_correcter_v1")
+grammar_model = AutoModelForSeq2SeqLM.from_pretrained("prithivida/grammar_error_correcter_v1")
+
 def correct_text(text):
-    tool = language_tool_python.LanguageTool('en-US')
-    corrected = tool.correct(text)
+    input_text = "gec: " + text
+    inputs = grammar_tokenizer([input_text], return_tensors="pt", max_length=128, truncation=True)
+    outputs = grammar_model.generate(**inputs, max_length=128)
+    corrected = grammar_tokenizer.batch_decode(outputs, skip_special_tokens=True)[0]
     return corrected
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
