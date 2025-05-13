@@ -4,6 +4,7 @@ from transformers import BertTokenizer, BertModel
 import os
 import boto3
 from botocore.exceptions import ClientError
+import language_tool_python
 
 app = Flask(__name__)
 
@@ -75,6 +76,11 @@ def predict_emotion(text, model, tokenizer, device='cpu'):
     
     return emotion_categories[predicted_class], probabilities[0].tolist()
 
+def correct_text(text):
+    tool = language_tool_python.LanguageTool('en-US')
+    corrected = tool.correct(text)
+    return corrected
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Kullanılan cihaz: {device}")
 
@@ -98,12 +104,17 @@ def analyze_emotion():
         text = data.get('text')
         
         if not text:
-            return jsonify({'error': 'Metin bulunamadı'}), 400
+            return jsonify({'error': 'Text not found'}), 400
+
+        # 1. Metni düzelt
+        corrected_text = correct_text(text)
         
-        emotion, probabilities = predict_emotion(text, model, tokenizer, device)
+        # 2. Duygu analizi
+        emotion, probabilities = predict_emotion(corrected_text, model, tokenizer, device)
         
         result = {
-            'text': text,
+            'original_text': text,
+            'corrected_text': corrected_text,
             'emotion': emotion,
             'probabilities': {
                 'sadness': probabilities[0],

@@ -9,4 +9,5 @@ scikit-learn==0.24.2
 tqdm==4.65.0
 sentencepiece==0.1.99
 protobuf==3.20.3
-boto3==1.26.137 
+boto3==1.26.137
+language_tool_python 

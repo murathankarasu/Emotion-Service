@@ -1,57 +1,88 @@
-# LoriApp - Duygu Analizi Sistemi
+# LoriApp - Emotion Recognition API
 
-Bu proje, kullanıcıların metin tabanlı gönderilerinden duygu analizi yapan bir sistemdir.
+This project provides a RESTful API for emotion recognition from English text. The API automatically corrects grammar and spelling mistakes in the input text before performing emotion analysis using a BERT-based model.
 
-## Proje Yapısı
+## Project Structure
 
 ```
 emotion-recognition/
-├── dataset/
-│   ├── training.csv
-│   ├── test.csv
-│   └── validation.csv
+├── models/
+│   └── duygu_analizi_model.pt
 ├── src/
-│   ├── models/
-│   │   └── emotion_model.py
-│   ├── utils/
-│   │   └── data_processor.py
-│   └── train.py
-├── requirements.txt
+│   ├── app.py
+│   ├── model.py
+│   ├── requirements.txt
+│   ├── Dockerfile
+│   └── ...
 └── README.md
 ```
 
-## Kurulum
+## Features
+- Automatic grammar and spelling correction for English text (using `language_tool_python`)
+- Emotion classification into six categories: Sadness, Joy, Love, Anger, Fear, Surprise
+- REST API endpoint for easy integration
 
-1. Gerekli paketleri yükleyin:
-```bash
-pip install -r requirements.txt
+## Installation
+
+1. Clone the repository and install dependencies:
+   ```bash
+   pip install -r src/requirements.txt
+   ```
+
+2. Make sure you have the model file (`duygu_analizi_model.pt`) in the `src/models/` directory. If not, it will be downloaded automatically from S3 (AWS credentials required).
+
+3. Start the API server:
+   ```bash
+   cd src
+   python app.py
+   ```
+
+## API Usage
+
+### Endpoint
+```
+POST /analyze
+Content-Type: application/json
 ```
 
-2. Modeli eğitin:
-```bash
-cd src
-python train.py
+#### Request Body
+```json
+{
+  "text": "I am very hapy today it is a beautful day"
+}
 ```
 
-## Kullanım
-
-Model eğitildikten sonra, metin tabanlı duygu analizi yapabilirsiniz:
-
-```python
-from models.emotion_model import EmotionModel
-
-model = EmotionModel()
-model.load_model("./saved_model")
-
-prediction = model.predict("Bugün çok mutluyum")
-print(prediction)
+#### Example Response
+```json
+{
+  "original_text": "I am very hapy today it is a beautful day",
+  "corrected_text": "I am very happy today. It is a beautiful day.",
+  "emotion": "Joy",
+  "probabilities": {
+    "sadness": 0.01,
+    "joy": 0.95,
+    "love": 0.01,
+    "anger": 0.01,
+    "fear": 0.01,
+    "surprise": 0.01
+  }
+}
 ```
 
-## Duygu Sınıfları
+## Emotion Categories
+- 0: Sadness
+- 1: Joy
+- 2: Love
+- 3: Anger
+- 4: Fear
+- 5: Surprise
 
-- 0: Mutlu
-- 1: Üzgün
-- 2: Öfkeli
-- 3: Endişeli
-- 4: Şaşkın
-- 5: Nötr 
+## Environment Variables
+To download the model from AWS S3, set the following environment variables:
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_REGION` (default: us-east-1)
+- `S3_BUCKET_NAME`
+
+## License
+MIT 
