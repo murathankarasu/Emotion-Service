@@ -32,4 +32,4 @@ RUN mkdir -p models cache
 ENV PORT=8080
 
 # Uygulamayı gunicorn ile çalıştırıyoruz
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "4", "app:app"] 
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "app:app"] 

@@ -1,9 +1,10 @@
 from flask import Flask, request, jsonify
 import torch
-from transformers import BertTokenizer, BertModel, AutoModelForSeq2SeqLM, AutoTokenizer
+from transformers import BertTokenizer, BertModel, AutoModelForSeq2SeqLM, AutoTokenizer, AutoModelForSequenceClassification
 import os
 import boto3
 from botocore.exceptions import ClientError
+from functools import lru_cache
 
 app = Flask(__name__)
 
@@ -60,63 +61,54 @@ def predict_emotion(text, model, tokenizer, device='cpu'):
     model.eval()
     
     with torch.no_grad():
-        outputs = model(input_ids, attention_mask)
-        probabilities = torch.softmax(outputs, dim=1)
+        outputs = model(input_ids, attention_mask=attention_mask)
+        probabilities = torch.softmax(outputs.logits, dim=1)
         predicted_class = torch.argmax(probabilities, dim=1).item()
     
     emotion_categories = {
-        0: "Üzüntü (Sadness)",
-        1: "Neşe (Joy)",
-        2: "Aşk (Love)",
-        3: "Öfke (Anger)",
-        4: "Korku (Fear)",
-        5: "Şaşkınlık (Surprise)"
+        0: "sadness",
+        1: "joy",
+        2: "love",
+        3: "anger",
+        4: "fear",
+        5: "surprise"
     }
     
     return emotion_categories[predicted_class], probabilities[0].tolist()
 
 # Grammar correction modeli ve tokenizer'ı yükle
-grammar_tokenizer = AutoTokenizer.from_pretrained("prithivida/grammar_error_correcter_v1")
-grammar_model = AutoModelForSeq2SeqLM.from_pretrained("prithivida/grammar_error_correcter_v1")
+@lru_cache(maxsize=1)
+def get_grammar_model():
+    grammar_tokenizer = AutoTokenizer.from_pretrained("pszemraj/grammar-synthesis-small")
+    grammar_model = AutoModelForSeq2SeqLM.from_pretrained("pszemraj/grammar-synthesis-small")
+    return grammar_tokenizer, grammar_model
 
 def correct_text(text):
-    input_text = "gec: " + text
-    inputs = grammar_tokenizer([input_text], return_tensors="pt", max_length=128, truncation=True)
+    grammar_tokenizer, grammar_model = get_grammar_model()
+    inputs = grammar_tokenizer([text], return_tensors="pt", max_length=128, truncation=True)
     outputs = grammar_model.generate(**inputs, max_length=128)
     corrected = grammar_tokenizer.batch_decode(outputs, skip_special_tokens=True)[0]
     return corrected
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print(f"Kullanılan cihaz: {device}")
-
-print("Model başlatılıyor...")
-model = DuyguAnalizi(num_labels=6).to(device)
-model.eval()
-
-print("Model dosyası S3'ten indiriliyor...")
-model_path = download_model_from_s3()
-state_dict = torch.load(model_path, map_location=device)
-if 'bert.embeddings.position_ids' not in state_dict:
-    state_dict['bert.embeddings.position_ids'] = torch.arange(512).unsqueeze(0)
-model.load_state_dict(state_dict)
-tokenizer = model.tokenizer
-print("Model başarıyla yüklendi!")
+@lru_cache(maxsize=1)
+def get_emotion_model():
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = AutoModelForSequenceClassification.from_pretrained("AdamCodd/tinybert-emotion-balanced").to(device)
+    tokenizer = AutoTokenizer.from_pretrained("AdamCodd/tinybert-emotion-balanced")
+    return model, tokenizer, device
 
 @app.route('/analyze', methods=['POST'])
 def analyze_emotion():
     try:
         data = request.get_json()
         text = data.get('text')
-        
         if not text:
             return jsonify({'error': 'Text not found'}), 400
-
         # 1. Metni düzelt
         corrected_text = correct_text(text)
-        
         # 2. Duygu analizi
+        model, tokenizer, device = get_emotion_model()
         emotion, probabilities = predict_emotion(corrected_text, model, tokenizer, device)
-        
         result = {
             'original_text': text,
             'corrected_text': corrected_text,
@@ -130,9 +122,7 @@ def analyze_emotion():
                 'surprise': probabilities[5]
             }
         }
-        
         return jsonify(result)
-    
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
